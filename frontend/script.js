@@ -823,6 +823,13 @@ async function loadEmployeeDetails(employeeId) {
                         <input id="editEmployeeSalary" type="number" min="0" step="0.01" value="${escapeHTML(employee.salary ?? 0)}" required>
                     </div>
                     <div class="form-field">
+                        <label for="editEmployeeManager">Manager</label>
+                        <select id="editEmployeeManager" class="manager-select"
+                            data-manager-id="${escapeHTML(employee.manager_id ?? "")}">
+                            <option value="">Unassigned</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
                         <label for="editEmployeeActive">Account status</label>
                         <select id="editEmployeeActive">
                             <option value="true" ${employee.is_active ? "selected" : ""}>Active</option>
@@ -838,6 +845,11 @@ async function loadEmployeeDetails(employeeId) {
         `;
 
         detail.classList.remove("hidden");
+
+        const managerSelect = getElement("editEmployeeManager");
+        if (managerSelect) {
+            populateManagerSelect(managerSelect);
+        }
 
         getElement("closeEmployeeDetail")?.addEventListener("click", () => {
             detail.classList.add("hidden");
@@ -857,6 +869,9 @@ async function updateEmployee(event) {
         email: getElement("editEmployeeEmail")?.value.trim(),
         department: getElement("editEmployeeDepartment")?.value.trim(),
         salary: Number(getElement("editEmployeeSalary")?.value),
+        manager_id: getElement("editEmployeeManager")?.value
+            ? Number(getElement("editEmployeeManager").value)
+            : null,
         is_active: getElement("editEmployeeActive")?.value === "true"
     };
 
@@ -897,7 +912,10 @@ async function createEmployee(event) {
         email: getElement("newEmployeeEmail")?.value.trim(),
         password: getElement("newEmployeePassword")?.value,
         department: getElement("newEmployeeDepartment")?.value.trim(),
-        salary: Number(getElement("newEmployeeSalary")?.value)
+        salary: Number(getElement("newEmployeeSalary")?.value),
+        manager_id: getElement("newEmployeeManager")?.value
+            ? Number(getElement("newEmployeeManager").value)
+            : null
     };
 
     const button = getElement("createEmployeeSubmit");
@@ -937,6 +955,9 @@ async function loadManagers() {
     try {
         const result = await callAPI("/manager/");
         managers = Array.isArray(result) ? result : [];
+        document.querySelectorAll(".manager-select").forEach(select => {
+            populateManagerSelect(select);
+        });
         tbody.innerHTML = managers.length ? managers.map(manager => `
             <tr>
                 <td><strong>${escapeHTML(manager.name || "Unnamed")}</strong><br>
@@ -948,6 +969,24 @@ async function loadManagers() {
     } catch (error) {
         tbody.innerHTML = `<tr><td colspan="3">${escapeHTML(getErrorMessage(error))}</td></tr>`;
     }
+}
+
+function populateManagerSelect(select) {
+    const selectedManagerId = select.dataset.managerId || select.value;
+    select.innerHTML = [
+        '<option value="">Unassigned</option>',
+        ...managers.map(manager => `
+            <option value="${escapeHTML(manager.id)}">
+                ${escapeHTML(manager.name || "Unnamed")}
+                (${escapeHTML(manager.department || "General")})
+            </option>
+        `)
+    ].join("");
+
+    select.value = managers.some(
+        manager => String(manager.id) === selectedManagerId
+    ) ? selectedManagerId : "";
+    select.dataset.managerId = select.value;
 }
 
 async function createManager(event) {

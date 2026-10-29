@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.utlis.db import Base, engine
+from src.utlis.db import Base, engine, ensure_employee_manager_column
 
 # Import models so SQLAlchemy can create their tables
 from src.user.models import UserModel
@@ -24,6 +24,7 @@ from src.salary.router import salary as salary_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+ensure_employee_manager_column()
 
 
 # Create FastAPI application

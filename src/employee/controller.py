@@ -8,14 +8,30 @@ from src.employee.models import EmployeeModel
 from src.employee.dtos import employee_to_dto
 from src.user.models import UserModel
 from src.user.controller import hash_password
+from src.manager.models import ManagerModel
 
 
 def create_employee(payload, db: Session):
     email = str(payload.email).strip().lower()
     name = payload.name.strip()
     department = (payload.department or "").strip() or "General"
+    manager_id = getattr(payload, "manager_id", None)
 
-    # Check whether this email already belongs to an employee.
+    # Check whether the selected manager exists.
+    if manager_id is not None:
+        manager = (
+            db.query(ManagerModel)
+            .filter(ManagerModel.id == manager_id)
+            .first()
+        )
+
+        if not manager:
+            raise HTTPException(
+                status_code=404,
+                detail="Selected manager not found.",
+            )
+
+    # Check for duplicate employee email.
     existing_employee = (
         db.query(EmployeeModel)
         .filter(EmployeeModel.email.ilike(email))
@@ -28,7 +44,7 @@ def create_employee(payload, db: Session):
             detail="This email already exists in the employee table.",
         )
 
-    # Check whether this email already belongs to a login account.
+    # Check for duplicate login email.
     existing_user = (
         db.query(UserModel)
         .filter(UserModel.email.ilike(email))
@@ -42,7 +58,7 @@ def create_employee(payload, db: Session):
         )
 
     try:
-        # Create the employee's login account.
+        # Create employee login account.
         user = UserModel(
             name=name,
             email=email,
@@ -52,13 +68,14 @@ def create_employee(payload, db: Session):
         )
         db.add(user)
 
-        # Create the employee's employment record.
+        # Create employee employment record.
         employee = EmployeeModel(
             name=name,
             email=email,
             password=None,
             salary=payload.salary,
             department=department,
+            manager_id=manager_id,
             is_active=True,
             date_of_joining=date.today(),
             is_updated=datetime.now(),
@@ -66,7 +83,6 @@ def create_employee(payload, db: Session):
         )
         db.add(employee)
 
-        # Save both records together.
         db.commit()
         db.refresh(employee)
 
@@ -76,12 +92,17 @@ def create_employee(payload, db: Session):
         db.rollback()
         raise
 
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        import logging
+        logging.getLogger(__name__).exception(
+            "Failed to create employee"
+        )
         raise HTTPException(
             status_code=500,
-            detail="Could not create employee and login account.",
-        )
+            detail="Could not create employee and login account. "
+                   "Check the backend terminal for the actual error.",
+        ) from exc
 
 
 def get_all_employees(db: Session):
@@ -113,6 +134,68 @@ def get_employee_by_id(employee_id: int, db: Session):
     return employee_to_dto(employee)
 
 
+def get_employees_by_manager(manager_user_id: int, db: Session):
+    # Find the manager profile belonging to the logged-in user.
+    manager = (
+        db.query(ManagerModel)
+        .filter(ManagerModel.user_id == manager_user_id)
+        .first()
+    )
+
+    if not manager:
+        raise HTTPException(
+            status_code=404,
+            detail="Manager profile not found.",
+        )
+
+    employees = (
+        db.query(EmployeeModel)
+        .filter(EmployeeModel.manager_id == manager.id)
+        .order_by(EmployeeModel.id)
+        .all()
+    )
+
+    return [
+        employee_to_dto(employee)
+        for employee in employees
+    ]
+
+
+def get_employee_for_manager(
+    employee_id: int,
+    manager_user_id: int,
+    db: Session,
+):
+    manager = (
+        db.query(ManagerModel)
+        .filter(ManagerModel.user_id == manager_user_id)
+        .first()
+    )
+
+    if not manager:
+        raise HTTPException(
+            status_code=404,
+            detail="Manager profile not found.",
+        )
+
+    employee = (
+        db.query(EmployeeModel)
+        .filter(
+            EmployeeModel.id == employee_id,
+            EmployeeModel.manager_id == manager.id,
+        )
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only view employees assigned to you.",
+        )
+
+    return employee_to_dto(employee)
+
+
 def update_employee(employee_id: int, payload, db: Session):
     employee = (
         db.query(EmployeeModel)
@@ -128,16 +211,33 @@ def update_employee(employee_id: int, payload, db: Session):
 
     data = payload.model_dump(exclude_unset=True)
 
+    # Find the linked login account using the original email.
     original_email = employee.email
 
-    user = (
-        db.query(UserModel)
-        .filter(UserModel.email == original_email)
-        .first()
-    )
+    user = None
+    if original_email:
+        user = (
+            db.query(UserModel)
+            .filter(UserModel.email == original_email)
+            .first()
+        )
+
+    # Validate a new manager assignment.
+    if "manager_id" in data and data["manager_id"] is not None:
+        manager = (
+            db.query(ManagerModel)
+            .filter(ManagerModel.id == data["manager_id"])
+            .first()
+        )
+
+        if not manager:
+            raise HTTPException(
+                status_code=404,
+                detail="Selected manager not found.",
+            )
 
     try:
-        # Update email only when a new email was provided.
+        # Update email when provided.
         if "email" in data and data["email"] is not None:
             new_email = str(data["email"]).strip().lower()
 
@@ -162,8 +262,9 @@ def update_employee(employee_id: int, payload, db: Session):
                     detail="Email already belongs to another employee.",
                 )
 
-            duplicate_user_query = db.query(UserModel).filter(
-                UserModel.email.ilike(new_email)
+            duplicate_user_query = (
+                db.query(UserModel)
+                .filter(UserModel.email.ilike(new_email))
             )
 
             if user:
@@ -184,7 +285,7 @@ def update_employee(employee_id: int, payload, db: Session):
             if user:
                 user.email = new_email
 
-        # Update remaining employee fields.
+        # Update other permitted fields.
         for key, value in data.items():
             if key == "email" or value is None:
                 continue
@@ -211,9 +312,14 @@ def update_employee(employee_id: int, payload, db: Session):
         db.rollback()
         raise
 
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        import logging
+        logging.getLogger(__name__).exception(
+            "Failed to update employee"
+        )
         raise HTTPException(
             status_code=500,
-            detail="Could not update employee.",
-        )
+            detail="Could not update employee. "
+                   "Check the backend terminal for the actual error.",
+        ) from exc

@@ -28,8 +28,7 @@ class AttendanceModel(Base):
         Integer,
         ForeignKey("employee.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
-    )
+        index=True,)
 
     attendance_date = Column(Date, nullable=False, index=True)
     check_in = Column(DateTime, nullable=True)

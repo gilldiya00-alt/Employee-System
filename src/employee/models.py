@@ -6,6 +6,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    ForeignKey
 )
 
 from src.utlis.db import Base
@@ -66,3 +67,10 @@ class EmployeeModel(Base):
         nullable=False,
         default="employee"
     )
+
+    manager_id = Column(
+    Integer,
+    ForeignKey("manager.id", ondelete="SET NULL"),
+    nullable=True,
+    index=True,
+)

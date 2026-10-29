@@ -17,4 +17,5 @@ def employee_to_dto(employee):
             else None
         ),
         "role": employee.role or "employee",
+        "manager_id": employee.manager_id,
     }
