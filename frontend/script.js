@@ -279,6 +279,7 @@ function showWorkspace() {
 
     updateUserInformation();
     updateRolePermissions();
+    closeCreateEmployee();
 
     goToPage("dashboard");
     loadDashboard();
