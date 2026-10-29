@@ -19,6 +19,15 @@ Run these commands from the repository root in separate PowerShell terminals.
    ```
 
    The command is safe to rerun: it leaves an existing admin account unchanged.
+   If you no longer know the admin password, reset it interactively (the
+   password is not displayed or included in shell history):
+
+   ```powershell
+   .\.venv\Scripts\python.exe reset_admin_password.py
+   ```
+
+   Choose a new password between 8 and 72 characters, then sign in using the
+   configured admin email and the new password.
 4. Start the frontend:
 
    ```powershell
