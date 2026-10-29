@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from jose import jwt
 from pwdlib import PasswordHash
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.user.models import UserModel
@@ -60,7 +61,7 @@ def login_user(
 
     user = (
         db.query(UserModel)
-        .filter(UserModel.email == normalized_email)
+        .filter(func.lower(UserModel.email) == normalized_email)
         .first()
     )
 

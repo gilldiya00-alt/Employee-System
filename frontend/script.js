@@ -363,7 +363,10 @@ async function login(event) {
         showToast("Welcome to PeopleDesk!");
 
     } catch (error) {
-        showMessage("loginMessage", getErrorMessage(error));
+        const message = error?.message === "Incorrect email or password"
+            ? "Incorrect email or password. Use the credentials for the account you are signing in to."
+            : getErrorMessage(error);
+        showMessage("loginMessage", message);
     } finally {
         if (button) {
             button.disabled = false;
